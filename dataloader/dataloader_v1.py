@@ -36,84 +36,99 @@ class CustomDataset(Dataset):
         return ret_item
 
 
-def transformer_collate_fn(batch, dict_max_size: dict, pad_token: int = 0):
-    if len(dict_max_size) == 0:
-        raise Exception("error in transformer_collate_fn: len(dict_max_size) == 0")
 
-    main_seq_max_len = dict_max_size["main_seq_max_len"]
-    metro_set_max_len = dict_max_size["metro_set_max_len"]
-    metro_item_set_max_len = dict_max_size["metro_item_set_max_len"]
 
-    batch_size = len(batch)
-    x_main_seq_id = torch.zeros((batch_size, main_seq_max_len), dtype=torch.long)
-    x_metro_set_id = torch.zeros((batch_size, main_seq_max_len, metro_set_max_len), dtype=torch.long)
-    x_metro_item_set_id = torch.zeros((batch_size, main_seq_max_len, metro_set_max_len, metro_item_set_max_len),
-                                      dtype=torch.long)
-    x_metro_item_value = torch.zeros((batch_size, main_seq_max_len, metro_set_max_len, metro_item_set_max_len),
-                                     dtype=torch.float)
-    y_et = torch.zeros((batch_size, 1), dtype=torch.float)
 
-    for idx_b_sample, sample in enumerate(batch):
-        # main step
-        main_len = min(len(sample["x_main_seq_id"]), main_seq_max_len)
-        x_main_seq_id[idx_b_sample, :main_len] = torch.tensor(sample["x_main_seq_id"][:main_len], dtype=torch.long)
+class DataloaderHelper:
 
-        # metro step
-        for idx_main in range(main_len):
-            metro_len = min(len(sample["x_metro_set_id"][idx_main]), metro_set_max_len)
-            x_metro_set_id[idx_b_sample, idx_main, :metro_len] = torch.tensor(
-                sample["x_metro_set_id"][idx_main][:metro_len], dtype=torch.long)
+    def __init__(self):
+        pass
 
-            # metro_item
-            for idx_metro in range(metro_len):
-                metro_item_len = min(len(sample["x_metro_item_set_id"][idx_main][idx_metro]), metro_item_set_max_len)
-                x_metro_item_set_id[idx_b_sample, idx_main, idx_metro, :metro_item_len] = torch.tensor(
-                    sample["x_metro_item_set_id"][idx_main][idx_metro][:metro_item_len],
-                    dtype=torch.long)
-                x_metro_item_value[idx_b_sample, idx_main, idx_metro, :metro_item_len] = torch.tensor(
-                    sample["x_metro_item_value"][idx_main][idx_metro][:metro_item_len],
-                    dtype=torch.float)
+    def transformer_collate_fn(batch, dict_max_size: dict, pad_token: int = 0):
+        if len(dict_max_size) == 0:
+            raise Exception("error in transformer_collate_fn: len(dict_max_size) == 0")
 
-        # ET
-        if isinstance(sample["y"], list) or isinstance(sample["y"], np.ndarray):
-            y_et[idx_b_sample, 0] = torch.tensor(sample["y"][0], dtype=torch.float)
+        main_seq_max_len = dict_max_size["main_seq_max_len"]
+        metro_set_max_len = dict_max_size["metro_set_max_len"]
+        metro_item_set_max_len = dict_max_size["metro_item_set_max_len"]
+
+        batch_size = len(batch)
+        x_main_seq_id = torch.zeros((batch_size, main_seq_max_len), dtype=torch.long)
+        x_metro_set_id = torch.zeros((batch_size, main_seq_max_len, metro_set_max_len), dtype=torch.long)
+        x_metro_item_set_id = torch.zeros((batch_size, main_seq_max_len, metro_set_max_len, metro_item_set_max_len),
+                                          dtype=torch.long)
+        x_metro_item_value = torch.zeros((batch_size, main_seq_max_len, metro_set_max_len, metro_item_set_max_len),
+                                         dtype=torch.float)
+        y_et = torch.zeros((batch_size, 1), dtype=torch.float)
+
+        for idx_b_sample, sample in enumerate(batch):
+            # main step
+            main_len = min(len(sample["x_main_seq_id"]), main_seq_max_len)
+            x_main_seq_id[idx_b_sample, :main_len] = torch.tensor(sample["x_main_seq_id"][:main_len], dtype=torch.long)
+
+            # metro step
+            for idx_main in range(main_len):
+                metro_len = min(len(sample["x_metro_set_id"][idx_main]), metro_set_max_len)
+                x_metro_set_id[idx_b_sample, idx_main, :metro_len] = torch.tensor(
+                    sample["x_metro_set_id"][idx_main][:metro_len], dtype=torch.long)
+
+                # metro_item
+                for idx_metro in range(metro_len):
+                    metro_item_len = min(len(sample["x_metro_item_set_id"][idx_main][idx_metro]),
+                                         metro_item_set_max_len)
+                    x_metro_item_set_id[idx_b_sample, idx_main, idx_metro, :metro_item_len] = torch.tensor(
+                        sample["x_metro_item_set_id"][idx_main][idx_metro][:metro_item_len],
+                        dtype=torch.long)
+                    x_metro_item_value[idx_b_sample, idx_main, idx_metro, :metro_item_len] = torch.tensor(
+                        sample["x_metro_item_value"][idx_main][idx_metro][:metro_item_len],
+                        dtype=torch.float)
+
+            # ET
+            if isinstance(sample["y"], list) or isinstance(sample["y"], np.ndarray):
+                y_et[idx_b_sample, 0] = torch.tensor(sample["y"][0], dtype=torch.float)
+            else:
+                y_et[idx_b_sample, 0] = torch.tensor(sample["y"], dtype=torch.float)
+
+        padding_mask_main_steps = x_main_seq_id.eq(pad_token)
+        padding_mask_metro_steps = x_metro_set_id.eq(pad_token)
+        padding_mask_metro_items = x_metro_item_set_id.eq(pad_token)
+
+        return {
+            "x_main_seq_id": x_main_seq_id,  # size of dimensions: [batch_size, main_seq_max_len], dtype = int
+            "x_metro_set_id": x_metro_set_id,
+            # size of dimensions: [batch_size,main_seq_max_len, metro_set_max_len] , dtype = int
+            "x_metro_item_set_id": x_metro_item_set_id,
+            # size of dimensions: [batch_size,main_seq_max_len, metro_set_max_len, metro_item_set_max_len], dtype = int
+            "x_metro_item_value": x_metro_item_value,
+            # size of dimensions:[batch_size, main_sq_max_len, metro_set_max_len, metro_item_set_max_len] , dtype = float
+            "padding_mask_main_steps": padding_mask_main_steps,  # the same size with x_main_seq_id
+            "padding_mask_metro_steps": padding_mask_metro_steps,  # the same size with x_metro_set_id
+            "padding_mask_metro_items": padding_mask_metro_items,  # the same size with x_metro_item_set_id
+            "y": y  # size of dimensions:[batch_size, 1],  dtype = float
+        }
+
+    def create_dataloader(self, dataset,
+                          batch_size,
+                          num_workers=4,
+                          pin_memory=True,
+                          collate_fn=None):
+        world_size = torch.cuda.device_count()
+        if world_size > 1:
+            sampler = DistributedSampler(dataset)
+            shuffle = False
         else:
-            y_et[idx_b_sample, 0] = torch.tensor(sample["y"], dtype=torch.float)
+            sampler = None
+            shuffle = True
 
-    padding_mask_main_steps = x_main_seq_id.eq(pad_token)
-    padding_mask_metro_items = x_metro_item_set_id.eq(pad_token)
-
-    return {
-        "x_main_seq_id": x_main_seq_id,
-        "x_metro_set_id": x_metro_set_id,
-        "x_metro_item_set_id": x_metro_item_set_id,
-        "x_metro_item_value": x_metro_item_value,
-        "padding_mask_main_steps": padding_mask_main_steps,
-        "y": y
-    }
-
-def create_dataloader(dataset,
-                      batch_size,
-                      num_workers=4,
-                      pin_memory=True,
-                      collate_fn=None):
-    world_size = torch.cuda.device_count()
-    if world_size > 1:
-        sampler = DistributedSampler(dataset)
-        shuffle = False
-    else:
-        sampler = None
-        shuffle = True
-
-    return DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=shuffle,
-        sampler=sampler,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
-        collate_fn=collate_fn
-    )
+        return DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            sampler=sampler,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            collate_fn=collate_fn
+        )
 
 
 if __name__ == "__main__":
@@ -130,17 +145,17 @@ if __name__ == "__main__":
     ]
 
     dataset = CustomDataset(data)
-    dataloader = create_dataloader(
-        dataset,
-        batch_size=2,
-        num_workers=2,
-        collate_fn=transformer_collate_fn
-    )
+    # dataloader = create_dataloader(
+    #     dataset,
+    #     batch_size=2,
+    #     num_workers=2,
+    #     collate_fn=transformer_collate_fn
+    # )
 
-    for batch in dataloader:
-        x_feats = batch['x']  # {'input_ids': Tensor[B,L], ...}
-        mask = batch['attention_mask']  # Tensor[B,L]
-        y = batch['y']  # {'taskA': Tensor[B], ...}
-        # model 호출 예:
-        # outputs = model(input_ids=x_feats['input_ids'], attention_mask=mask, labels=y)
-        pass
+    # for batch in dataloader:
+    #     x_feats = batch['x']  # {'input_ids': Tensor[B,L], ...}
+    #     mask = batch['attention_mask']  # Tensor[B,L]
+    #     y = batch['y']  # {'taskA': Tensor[B], ...}
+    #     # model 호출 예:
+    #     # outputs = model(input_ids=x_feats['input_ids'], attention_mask=mask, labels=y)
+    #     pass

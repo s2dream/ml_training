@@ -3,9 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as FD
 from typing import Optional
 
-# -------------------------
-# 유틸: Sinusoidal Positional Encoding
-# -------------------------
+# Positional Encoding
 class SinusoidalPE(nn.Module):
     def __init__(self, d_model: int, max_len: int = 10000):
         super().__init__()
@@ -23,10 +21,9 @@ class SinusoidalPE(nn.Module):
         T = x.size(1)
         return x + self.pe[:T].unsqueeze(0)  # [1, T, D]
 
-# -------------------------
-# 메인 모델
-# -------------------------
-class MetroRegressor(nn.Module):
+
+
+class ETPredRegressor(nn.Module):
     def __init__(
         self,
         TOTAL_SIZE_METRO_ITEM: int,
@@ -180,7 +177,7 @@ if __name__ == "__main__":
     TOTAL_SIZE_METRO_STEP = 10000
     dim = 512
 
-    model = MetroRegressor(
+    model = ETPredRegressor(
         TOTAL_SIZE_METRO_ITEM=TOTAL_SIZE_METRO_ITEM,
         TOTAL_SIZE_METRO_STEP=TOTAL_SIZE_METRO_STEP,
         dim=dim,
